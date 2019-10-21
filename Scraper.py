@@ -40,14 +40,13 @@ class Scraper:
     # Returns a list of SKUs from the search results
     def get_skus(self):
         skus = []
-        sku_values = self.get_contents().find_all("span", attrs={"sku-value"})
-        for i in range(len(sku_values)):
-            if i % 2 != 0:
-                skus.append(sku_values[i].text.strip())
+        sku_values = self.get_contents().find_all("li", attrs={"class": "sku-item"})
+        for i in sku_values:
+            skus.append(i.get("data-sku-id"))
         return skus
 
     # Returns the number of search results on the page. If more than 25, selenium must be used to list additional
-    # results. For some reason, the best buy website returns (n - 1) result count regardless of the search.
+    # results. For some reason, the best buy website sometimes returns an  (n - 1) result count.
     def get_num_results(self):
         num_results = self.get_contents().find("span", attrs={"item-count"}).text.split()
         num = int(num_results[0]) + 1
