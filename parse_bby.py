@@ -3,11 +3,6 @@ import Scraper
 import Parser
 
 
-
-def ask_url():
-    return str(eval(input("Input the url you are parsing: ")))
-
-
 if __name__ == "__main__":
     api_key = str(input("Input the API key. If you don't have one, leave this prompt blank: "))
     url = str(input("Input the url you are parsing: "))
