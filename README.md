@@ -1,0 +1,1 @@
+This is intended as a command line tool to scrape, parse, and save data on the Best Buy website. Upon completion, it will allow both simple url information extracion and interaction with Best Buy's API.
