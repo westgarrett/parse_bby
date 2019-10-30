@@ -1,6 +1,4 @@
 import Scraper
-import Parser
-
 
 if __name__ == "__main__":
     api_key = ""
@@ -18,37 +16,37 @@ if __name__ == "__main__":
         # Initialize Scraper object with the given url
         scraper = Scraper.Scraper(url)
 
-        # Returns the request.get status code
-        print(scraper.get_status_code())
-
-        # Returns the number of page results
-        # As a pretty string
-        print(scraper.get_num_results())
-        # As an integer
-        print(int(scraper.get_num_results()))
-        # As a float(if you're into that)
-        print(float(scraper.get_num_results()))
-
-        # Returns a list of skus on the page
-        print(scraper.get_skus())
-
-        # Returns a list of prices for each sku
-        print(scraper.get_prices())
-
-        # Returns the number of pages
-        print(scraper.get_num_pages())
-
-        # Returns the links to the next get_num_pages() pages
-        print(scraper.get_pages())
+        # # Returns the request.get status code
+        # print(scraper.get_status_code())
         #
-        # Returns the names of all products on a given page
-        print(scraper.get_product_names())
-
-        # Returns a list of all the links on a given page
-        print(scraper.get_product_links())
+        # # Returns the number of page results
+        # # As a pretty string
+        # print(scraper.get_num_results())
+        # # As an integer
+        # print(int(scraper.get_num_results()))
+        # # As a float(if you're into that)
+        # print(float(scraper.get_num_results()))
+        #
+        # # Returns a list of skus on the page
+        # print(scraper.get_skus())
+        #
+        # # Returns a list of prices for each sku
+        # print(scraper.get_prices())
+        #
+        # # Returns the number of pages
+        # print(scraper.get_num_pages())
+        #
+        # # Returns the links to the next get_num_pages() pages
+        # print(scraper.get_pages())
+        # #
+        # # Returns the names of all products on a given page
+        # print(scraper.get_product_names())
+        #
+        # # Returns a list of all the links on a given page
+        # print(scraper.get_product_links())
 
         # # Returns a list of all UPCs of products on a given page
-        # print(scraper.get_upcs())
+        print(scraper.get_upcs())
 
         # Returns the current page of results
         print(scraper.get_current_page())
