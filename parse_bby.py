@@ -1,3 +1,5 @@
+import time
+
 from Saver import Saver
 from Scraper import Scraper
 
@@ -54,5 +56,7 @@ if __name__ == "__main__":
     # Initialize Scraper object with the given url (optional)
     scraper = Scraper()
 
+    t = time.time()
     saver = Saver()
-    saver.write_phones_csv()
+    saver.write_unl_phones_csv()
+    print(time.time() - t)

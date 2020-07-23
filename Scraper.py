@@ -17,6 +17,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.keys import Keys
 from regex import compile
 import asyncio
@@ -32,13 +33,18 @@ class Scraper:
         print("Initializing a scraper object")
         self.url = url
         self.headers = {'User-Agent': 'Mozilla/5.0'}
+        self.product_page_url = "https://www.bestbuy.com/site/searchpage.jsp?st="
         try:
             self.req = self._get_request()
-        except Exception:
+        except Exception as e:
+            print(f"\nCould not get request object due to exception: {e}")
+            print("This happens when initiating a Scraper() object with no url parameter. It's fine.")
             pass
         try:
             self.contents = self._get_contents()
-        except Exception:
+        except Exception as e:
+            print(f"\nCould not get request object due to exception: {e}")
+            print("This happens when requests fails to grab contents in the Scraper() initializer.")
             pass
 
     # For debugging
@@ -61,6 +67,7 @@ class Scraper:
         options = Options()
         options.headless = False
         driver = webdriver.Firefox(options=options)
+
         print("Starting a headless selenium browser")
         return driver
 
