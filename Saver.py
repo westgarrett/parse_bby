@@ -3,7 +3,8 @@ from typing import TextIO
 
 from Scraper import Scraper
 from UNLScraper import UNLScraper
-from CarrierScraper import CarrierScraper
+# from CarrierScraper import CarrierScraper
+from Scraper import function_timer
 
 
 class Saver:
@@ -51,16 +52,19 @@ class Saver:
         # For each sku, run a request with a new scraper object for each product page
         for sku in skus:
             sku = sku.strip()
-
-            unl_scraper = UNLScraper(f"https://www.bestbuy.com/site/searchpage.jsp?st={sku}")
+            search_url = f"https://www.bestbuy.com/site/searchpage.jsp?st={sku}"
+            unl_scraper = UNLScraper(search_url)
             # Returns a dictionary of activation prices
             pricing_dict = unl_scraper.get_activation_prices(sku, driver)
+            print(pricing_dict)
 
             if pricing_dict == 0:
                 print(f"SKU: {sku} does not exist on website. Terminate row.")
             else:
+
                 product_name = unl_scraper.get_product_name_on_product_page()
                 compatibility = unl_scraper.get_carrier_compatibility()
+
                 # Create a dictionary to write a row to CSV
                 row_dict = {"ID": self.index, "SKU": sku, "ProductName": product_name, "Compatibility": compatibility}
 
@@ -68,6 +72,11 @@ class Saver:
                 row_dict.update(pricing_dict)
                 self.writer_obj.writerow(row_dict)
                 self.index += 1
+
+                # I think the Scraper()._get_contents() method is causing RAM usage to spike really hard.
+                # This should help a bit as none of the scraper objects are being reused.
+                print("Deleting the scraper object")
+                del unl_scraper
 
         skus.close()
         self.phones.close()
@@ -86,7 +95,7 @@ class Saver:
             no_results = carrier_scraper.no_results_flag(driver)
             if no_results:
                 pass
-            product_name = carrier_scraper.get_product_name_on_product_page()
+            product_name = carrier_scraper.get_product_name_on_product_page_selenium()
             compatibility = carrier_scraper.get_carrier_compatibility()
             # Returns a dictionary of activation prices
             pricing_dict = carrier_scraper.get_activation_prices(sku, driver)
