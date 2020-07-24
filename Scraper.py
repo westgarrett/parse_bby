@@ -65,40 +65,15 @@ class Scraper:
     @staticmethod
     def start_selenium():
         options = Options()
-        options.headless = False
+        options.headless = True
         driver = webdriver.Firefox(options=options)
 
         print("Starting a headless selenium browser")
         return driver
 
-    # Clicks "<element>" on a page using Selenium and returns the information in "<name>"
-    # Deprecated, keeping for formatting reference
-    def _click_element(self, element, name):
-        driver = self.start_selenium()
-        driver.get(self.url)
-
-        # Deprecated
-        if name == "UPC":
-            # Wait to see the button before trying to click it
-            try:
-                button = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, '//button[@data-track["Specifications"]]')))
-            finally:
-                button.click()
-            print(button)
-            row_values = driver.find_elements_by_xpath('//div[@class["title-container"]]')
-            # for i in row_values:
-            #     try:
-            #         print(int(i.text))
-            #     except Exception:
-            #         pass
-            # driver.quit()
-
-        return row_values
-
     @staticmethod
     def _wait_for_load_selenium(xpath, driver):
-        wait = WebDriverWait(driver, 5)
+        wait = WebDriverWait(driver, 1)
         wait.until(EC.visibility_of_element_located((By.XPATH, xpath)))
 
     ####################################################################################################################
@@ -112,6 +87,9 @@ class Scraper:
     ####################################################################################################################
     # Get Functions for search pages                                                                                   #
     ####################################################################################################################
+
+    # https://www.bestbuy.com/site/searchpage.jsp?st=*
+    # Did not know you could do this.
 
     # Returns the link to each product on the given search page.
     def get_product_names(self):
@@ -229,6 +207,15 @@ class Scraper:
         title = self.contents.find("div", attrs={"itemprop": "name"}).find_next("h1").text
         return title
 
+    # Get product name on product page with Selenium by xpath
+    # WIP, currently results in "Unable to find element <xpath>"
+    @staticmethod
+    def get_product_name_on_product_page_selenium(driver):
+        driver.implicitly_wait(5)
+        WebDriverWait(driver, 5)
+        title_element = driver.find_element_by_xpath('//*[@class="sku-title"]')
+        return title_element.text
+
     # Gets the price of the page item.
     def get_prices(self):
         print(self.contents)
@@ -246,6 +233,10 @@ class Scraper:
             "div").contents[0].split(",")
         return comp
 
+    # @staticmethod
+    # def get_carrier_compatibility_selenium(driver):
+    #     comp = driver.find_element_by_xpath("//*[contains(text(), 'Carrier Compatibility')]")
+    #     return comp
     ####################################################################################################################
     # Set Functions                                                                                                    #
     ####################################################################################################################
@@ -255,4 +246,17 @@ class Scraper:
         # scraper = Scraper()
         pass
 
+
+####################################################################################################################
+# Tool Functions                                                                                                   #
+####################################################################################################################
+
+def function_timer(func):
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        x = func(*args, **kwargs)
+        end = time.time()
+        print(f"It took {end - start} seconds to process {func.__name__} for {args[0]}")
+        return x
+    return wrapper
 
