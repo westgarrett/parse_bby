@@ -6,7 +6,7 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.common.action_chains import ActionChains
-from Scraper import Scraper
+from Scraper import Scraper, function_timer
 
 
 class UNLScraper(Scraper):
@@ -53,14 +53,12 @@ class UNLScraper(Scraper):
         driver.implicitly_wait(5)
 
         activation_xpath = '//*[@data-track="adprice-1m-"]'
-        # self._wait_for_load_selenium(activation_xpath, driver)
-        WebDriverWait(driver, 5).until(driver.find_element_by_xpath(activation_xpath))
+        WebDriverWait(driver, 5)#.until(driver.find_element_by_xpath(activation_xpath))
         activation_price_element = driver.find_element_by_xpath(activation_xpath)
         activation_price = self.find_price(activation_price_element.text)[0]
 
         unlocked_xpath = '//*[@data-track="adprice-unactivated"]'
-        WebDriverWait(driver, 5).until(driver.find_element_by_xpath(unlocked_xpath))
-        # self._wait_for_load_selenium(unlocked_xpath, driver)
+        WebDriverWait(driver, 5)#.until(driver.find_element_by_xpath(unlocked_xpath))
         unlocked_price_element = driver.find_element_by_xpath(unlocked_xpath)
         unlocked_price = self.find_price(unlocked_price_element.text)[0]
 
@@ -92,37 +90,67 @@ class UNLScraper(Scraper):
         return driver.find_element_by_xpath('//*[@data-track="trade-in-optin-no"]')
 
     @staticmethod
+    # Determines if no results are present from a given sku
+    # Test SKU: 0000000
     def find_no_results_message_selenium(driver):
         xpath = '//*[@class="no-results-message"]'
-        return driver.find_element_by_xpath('//*[@class="no-results-message"]')
+        return driver.find_elements_by_xpath(xpath)
 
     @staticmethod
+    # Determines if something goes wrong i.e. cannot figure out what the browser is asking.
+    # Test "SKU": +
     def find_something_went_wrong_message_selenium(driver):
         xpath = '//*[@class="heading VPT-title"]'
-        return driver.find_element_by_xpath('//*[@class="heading VPT-title"]')
+        return driver.find_elements_by_xpath(xpath)
+
+    # Finds the img tag holding the phone image on the given page. A good check if there are results for carrier
+    # options.
+    @staticmethod
+    def find_image_on_carrier_activation_page(driver):
+        xpath = '//*[@class="carriers-page__device-image"]'
+        return driver.find_elements_by_xpath(xpath)
 
     # Returns a boolean. If no_results_message or something_went_wrong_message is present, return True because
     # there are no results.
+    @function_timer
     def no_results_flag(self, driver):
-        no_results = False
-        went_wrong = False
+        # Assume that there are no search results
+        no_results = True
+        went_wrong = True
 
         # Looks for "No results found" message
-        try:
-            self.find_no_results_message_selenium(driver)
-            print("No results found message present")
-        except NoSuchElementException:
-            no_results = True
+        # try:
+        #     self.find_no_results_message_selenium(driver)
+        #     print("No results found message present")
+        # except NoSuchElementException:
+        #     # There are results
+        #     no_results = False
 
         # Looks for "Something went wrong" message
-        try:
-            self.find_something_went_wrong_message_selenium(driver)
+        # try:
+        #     self.find_something_went_wrong_message_selenium(driver)
+        #     print("Something went wrong message present")
+        # except NoSuchElementException:
+        #     # Nothing went wrong
+        #     went_wrong = False
+
+        # If the image is present, "no results found" message and "something went wrong" message are not present
+        # This is an error catch. If there is a rogue SKU, it will take longer than a non-rogue SKU.
+        if len(self.find_image_on_carrier_activation_page(driver)) > 0:
+            return False
+
+        if len(self.find_no_results_message_selenium(driver)) > 0:
+            print("No results found message present")
+        else:
+            no_results = False
+
+        if len(self.find_something_went_wrong_message_selenium(driver)) > 0:
             print("Something went wrong message present")
-        except NoSuchElementException:
-            went_wrong = True
+        else:
+            went_wrong = False
 
         # Returns True if the no_results message is found or the something_went_wrong message is found.
-        if not no_results or not went_wrong:
+        if no_results or went_wrong:
             return True
         return False
 
@@ -161,6 +189,7 @@ class UNLScraper(Scraper):
 
         upgrade_button = self.find_activation_type_button(page_content, "upgrade")
         new_line_button = self.find_activation_type_button(page_content, "add-a-line")
+
         if upgrade_button is not None:
             upg_is_available = True
         if new_line_button is not None:
@@ -177,6 +206,7 @@ class UNLScraper(Scraper):
     # If a product has activation pricing, return them in a dictionary with keys:
     # ATT_new_price,ATT_upg_price,SPR_new_price,SPR_upg_price,VZW_new_price,VZW_upg_price,TMO_new_price,TMO_upg_price,Unactivated_price
     # Currently only works if there is one "disclaimer" tag. Currently no offers to add additional functionality
+    @function_timer
     def get_activation_prices(self, sku, driver):
         # Adds WebDriver as a property to the class. May make things easier. Maybe harder. We'll see.
         # self.driver = driver
@@ -185,8 +215,8 @@ class UNLScraper(Scraper):
         driver.get(price_page)
 
         # Grabs the innerHTML generated by javascript
-        html = driver.execute_script("return document.documentElement.innerHTML;")
-        page_content = BeautifulSoup(html, "html5lib")
+        # html = driver.execute_script("return document.documentElement.innerHTML;")
+        # page_content = BeautifulSoup(html, "html5lib")
 
         # Make sure to quit out of the selenium driver after the script is through
         # if disclaimer is present, there is a different pricing for upg/new line
@@ -198,7 +228,7 @@ class UNLScraper(Scraper):
         no_results = self.no_results_flag(driver)
 
         if no_results:
-            print("No results flag triggered")
+            print(f"A no result flag has been triggered in get_activation_prices with sku: {sku}")
             return 0
 
         try:
@@ -213,10 +243,12 @@ class UNLScraper(Scraper):
 
             try:
                 vzw_price_element = self.find_carrier_price_selenium("Verizon", driver)
+                # Attempting to avoid stale element exceptions
+                vzw_price_element_string = vzw_price_element.text
                 # Test if price has more than one element. If price has 0 elements, find_price returns 0, 0[0] returns
                 # a TypeError
                 try:
-                    vzw_price = self.find_price(vzw_price_element.text)[0]
+                    vzw_price = self.find_price(vzw_price_element_string)[0]
                 except TypeError:
                     exception_price_list = self.find_carrier_and_unlocked_price_if_only_one_carrier_promo_selenium(driver, sku)
                     vzw_price, unactivated = exception_price_list[0], exception_price_list[1]
@@ -227,14 +259,15 @@ class UNLScraper(Scraper):
 
             try:
                 att_price_element = self.find_carrier_price_selenium("ATT", driver)
+                # Attempting to avoid stale element exceptions
+                att_price_element_string = att_price_element.text
                 # Test if price has more than one element. If price has 0 elements, find_price returns 0, 0[0] returns
                 # a TypeError
                 try:
-                    att_price = self.find_price(att_price_element.text)[0]
+                    att_price = self.find_price(att_price_element_string)[0]
                 except TypeError:
                     exception_price_list = self.find_carrier_and_unlocked_price_if_only_one_carrier_promo_selenium(driver, sku)
                     att_price, unactivated = exception_price_list[0], exception_price_list[1]
-                    print(exception_price_list, "ATT price:", att_price)
                 att_element_present = True
             except Exception:
                 print(f"AT&T activation not available for {sku}")
@@ -242,10 +275,11 @@ class UNLScraper(Scraper):
 
             try:
                 spr_price_element = self.find_carrier_price_selenium("Sprint", driver)
+                spr_price_element_string = spr_price_element.text
                 # Test if price has more than one element. If price has 0 elements, find_price returns 0, 0[0] returns
                 # a TypeError
                 try:
-                    spr_price = self.find_price(spr_price_element.text)[0]
+                    spr_price = self.find_price(spr_price_element_string)[0]
                 except TypeError:
                     exception_price_list = self.find_carrier_and_unlocked_price_if_only_one_carrier_promo_selenium(driver, sku)
                     spr_price, unactivated = exception_price_list[0], exception_price_list[1]
@@ -254,19 +288,20 @@ class UNLScraper(Scraper):
                 print(f"Sprint activation not available for {sku}")
                 spr_element_present = False
 
-            try:
-                tmo_price_element = self.find_carrier_price_selenium("TMobile", driver)
-                # Test if price has more than one element. If price has 0 elements, find_price returns 0, 0[0] returns
-                # a TypeError
-                try:
-                    tmo_price = self.find_price(tmo_price_element.text)[0]
-                except TypeError:
-                    exception_price_list = self.find_carrier_and_unlocked_price_if_only_one_carrier_promo_selenium(driver, sku)
-                    tmo_price, unactivated = exception_price_list[0], exception_price_list[1]
-                tmo_element_present = True
-            except Exception:
-                print(f"T-Mobile activation not available for {sku}")
-                tmo_element_present = False
+            # try:
+            #     tmo_price_element = self.find_carrier_price_selenium("TMobile", driver)
+            #     tmo_price_element_string = tmo_price_element.text
+            #     # Test if price has more than one element. If price has 0 elements, find_price returns 0, 0[0] returns
+            #     # a TypeError
+            #     try:
+            #         tmo_price = self.find_price(tmo_price_element_string)[0]
+            #     except TypeError:
+            #         exception_price_list = self.find_carrier_and_unlocked_price_if_only_one_carrier_promo_selenium(driver, sku)
+            #         tmo_price, unactivated = exception_price_list[0], exception_price_list[1]
+            #     tmo_element_present = True
+            # except Exception:
+            #     print(f"T-Mobile activation not available for {sku}")
+            #     tmo_element_present = False
 
             try:
                 unactivated_element = self.find_carrier_price_selenium("activate-later", driver)
@@ -280,7 +315,7 @@ class UNLScraper(Scraper):
 
             # Verizon
             if verizon_element_present:
-                if self.contains_disclaimer(vzw_price_element.text):
+                if self.contains_disclaimer(vzw_price_element_string):
                     print("vzw has disclaimer")
                     vzw_new = disclaimer_price[0]
                     vzw_upg = disclaimer_price[1]
@@ -298,7 +333,7 @@ class UNLScraper(Scraper):
 
             # AT&T
             if att_element_present:
-                if self.contains_disclaimer(att_price_element.text):
+                if self.contains_disclaimer(att_price_element_string):
                     print("att has disclaimer")
                     att_new = disclaimer_price[0]
                     att_upg = disclaimer_price[1]
@@ -316,7 +351,7 @@ class UNLScraper(Scraper):
 
             # Sprint
             if spr_element_present:
-                if self.contains_disclaimer(spr_price_element.text):
+                if self.contains_disclaimer(spr_price_element_string):
                     print("spr has disclaimer")
                     spr_new = disclaimer_price[0]
                     spr_upg = disclaimer_price[1]
@@ -332,21 +367,21 @@ class UNLScraper(Scraper):
                         spr_upg = spr_price
 
             # T-Mobile
-            if tmo_element_present:
-                if self.contains_disclaimer(tmo_price_element.text):
-                    print("tmo has disclaimer")
-                    tmo_new = disclaimer_price[0]
-                    tmo_upg = disclaimer_price[1]
-                else:
-                    flag = self.line_activation_available(sku, "TMobile", driver)
-                    tmo_upg_flag = flag[0]
-                    tmo_new_flag = flag[1]
-                    if tmo_upg_flag and tmo_new_flag:
-                        tmo_new = tmo_upg = tmo_price
-                    elif tmo_new_flag and not tmo_upg_flag:
-                        tmo_new = tmo_price
-                    else:
-                        tmo_upg = tmo_price
+            # if tmo_element_present:
+            #     if self.contains_disclaimer(tmo_price_element_string):
+            #         print("tmo has disclaimer")
+            #         tmo_new = disclaimer_price[0]
+            #         tmo_upg = disclaimer_price[1]
+            #     else:
+            #         flag = self.line_activation_available(sku, "TMobile", driver)
+            #         tmo_upg_flag = flag[0]
+            #         tmo_new_flag = flag[1]
+            #         if tmo_upg_flag and tmo_new_flag:
+            #             tmo_new = tmo_upg = tmo_price
+            #         elif tmo_new_flag and not tmo_upg_flag:
+            #             tmo_new = tmo_price
+            #         else:
+            #             tmo_upg = tmo_price
 
             dict_keys = ['ATT_new_price', 'ATT_upg_price',
                          'SPR_new_price', 'SPR_upg_price',
