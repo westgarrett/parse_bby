@@ -272,34 +272,18 @@ class Scraper:
 
     # Returns a boolean. If no_results_message or something_went_wrong_message is present, return True because
     # there are no results.
+    # If there is a catch condition, the presence indicates there are results, so if catch_condition return False
     @function_timer
-    def no_results_flag(self, driver: webdriver, catch_condition: bool = False) -> bool:
+    def no_results_flag(self, driver: webdriver, catch_condition: bool) -> bool:
 
-        # Assume there is no exception and there are no search results
+        # Assume there is not an exception and there are no search results
         no_results = True
         went_wrong = True
 
-        # Looks for "No results found" message using try - except
-        # try:
-        #     self.find_no_results_message_selenium(driver)
-        #     print("No results found message present")
-        # except NoSuchElementException:
-        #     # There are results
-        #     no_results = False
-
-        # Looks for "Something went wrong" message
-        # try:
-        #     self.find_something_went_wrong_message_selenium(driver)
-        #     print("Something went wrong message present")
-        # except NoSuchElementException:
-        #     # Nothing went wrong
-        #     went_wrong = False
-
-        # I could possibly rewrite this method to accept a function condition
         # If a catch condition is present (True), don't search for the next two exceptions to save resources (namely
         #   time)
         if catch_condition:
-            return catch_condition
+            return False
 
         if self.find_no_results_message_selenium(driver) > 0:
             print("No results found message present")
@@ -331,6 +315,10 @@ class Scraper:
         # For some reason this regex returns ('$', '<price in number form>', '', '')
         # Saving the number to the list explicitly
         for i in range(len(prices)):
+            # for j in range(len(prices[i])):
+            #     # if the list item is an empty string, remove it from the list
+            #     if prices[i][j] == "":
+            #         del prices[i][j]
             prices[i] = prices[i][1]
         return prices
 
