@@ -6,7 +6,8 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.common.action_chains import ActionChains
-from Scraper import Scraper, function_timer
+from Scraper import Scraper
+from Wrappers import function_timer
 
 
 class UNLScraper(Scraper):
@@ -32,20 +33,6 @@ class UNLScraper(Scraper):
             return True
         return False
 
-    @staticmethod
-    def find_price(tag):
-        # Regex to select pricing in a string
-        regex_selector = r"(USD|EUR|€|\$|£)\s?(\d{1,}(?:[.,]\d{3})*(?:[.,]\d{2}))|(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\s?(USD|EUR)"
-        matches = regex.compile(regex_selector)
-        prices = list(matches.findall(tag))
-        if len(prices) == 0:
-            return 0
-        # For some reason this regex returns ('$', '<price in number form>', '', '')
-        # Saving the number to the list explicitly
-        for i in range(len(prices)):
-            prices[i] = prices[i][1]
-        return prices
-
     # If check_price_presence returns 0 (no prices), navigate to product page to grab pricing.
     # Added WebDriverWait function because I keep getting a stale element reference error
     def find_carrier_and_unlocked_price_if_only_one_carrier_promo_selenium(self, driver, sku):
@@ -53,6 +40,8 @@ class UNLScraper(Scraper):
         driver.implicitly_wait(5)
 
         activation_xpath = '//*[@data-track="adprice-1m-"]'
+        # .until causes the method to terminate. I assume .until has a NoneType return statement when found
+        # Not 100% sure on the usage format
         WebDriverWait(driver, 5)#.until(driver.find_element_by_xpath(activation_xpath))
         activation_price_element = driver.find_element_by_xpath(activation_xpath)
         activation_price = self.find_price(activation_price_element.text)[0]
@@ -89,68 +78,12 @@ class UNLScraper(Scraper):
         xpath = '//*[@data-track="trade-in-optin-no"]'
         return driver.find_element_by_xpath('//*[@data-track="trade-in-optin-no"]')
 
-    @staticmethod
-    # Determines if no results are present from a given sku
-    # Test SKU: 0000000
-    def find_no_results_message_selenium(driver):
-        xpath = '//*[@class="no-results-message"]'
-        return driver.find_elements_by_xpath(xpath)
-
-    @staticmethod
-    # Determines if something goes wrong i.e. cannot figure out what the browser is asking.
-    # Test "SKU": +
-    def find_something_went_wrong_message_selenium(driver):
-        xpath = '//*[@class="heading VPT-title"]'
-        return driver.find_elements_by_xpath(xpath)
-
     # Finds the img tag holding the phone image on the given page. A good check if there are results for carrier
-    # options.
+    # options. Indicates presence, returns boolean
     @staticmethod
-    def find_image_on_carrier_activation_page(driver):
+    def find_image_presence_on_carrier_activation_page(driver) -> bool:
         xpath = '//*[@class="carriers-page__device-image"]'
-        return driver.find_elements_by_xpath(xpath)
-
-    # Returns a boolean. If no_results_message or something_went_wrong_message is present, return True because
-    # there are no results.
-    @function_timer
-    def no_results_flag(self, driver):
-        # Assume that there are no search results
-        no_results = True
-        went_wrong = True
-
-        # Looks for "No results found" message
-        # try:
-        #     self.find_no_results_message_selenium(driver)
-        #     print("No results found message present")
-        # except NoSuchElementException:
-        #     # There are results
-        #     no_results = False
-
-        # Looks for "Something went wrong" message
-        # try:
-        #     self.find_something_went_wrong_message_selenium(driver)
-        #     print("Something went wrong message present")
-        # except NoSuchElementException:
-        #     # Nothing went wrong
-        #     went_wrong = False
-
-        # If the image is present, "no results found" message and "something went wrong" message are not present
-        # This is an error catch. If there is a rogue SKU, it will take longer than a non-rogue SKU.
-        if len(self.find_image_on_carrier_activation_page(driver)) > 0:
-            return False
-
-        if len(self.find_no_results_message_selenium(driver)) > 0:
-            print("No results found message present")
-        else:
-            no_results = False
-
-        if len(self.find_something_went_wrong_message_selenium(driver)) > 0:
-            print("Something went wrong message present")
-        else:
-            went_wrong = False
-
-        # Returns True if the no_results message is found or the something_went_wrong message is found.
-        if no_results or went_wrong:
+        if len(driver.find_elements_by_xpath(xpath)) > 0:
             return True
         return False
 
@@ -225,7 +158,8 @@ class UNLScraper(Scraper):
         exception_price_list = []
 
         # Check if a search term does not result in a "Item not found" page
-        no_results = self.no_results_flag(driver)
+        # Added a catch condition to avoid long DOM scrape times to find no exceptions.
+        no_results = self.no_results_flag(driver, self.find_image_presence_on_carrier_activation_page(driver))
 
         if no_results:
             print(f"A no result flag has been triggered in get_activation_prices with sku: {sku}")

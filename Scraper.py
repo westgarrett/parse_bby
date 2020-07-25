@@ -1,4 +1,5 @@
 import csv
+from typing import Callable
 
 import requests
 from bs4 import BeautifulSoup
@@ -9,7 +10,6 @@ import html5lib
 import validators
 import regex
 import threading
-
 from requests import HTTPError
 from validator_collection import checkers
 from selenium import webdriver
@@ -22,6 +22,7 @@ from selenium.webdriver.common.keys import Keys
 from regex import compile
 import asyncio
 import aiohttp
+from Wrappers import function_timer
 
 
 # This class encapsulates scraping tools for use on the Best Buy website.
@@ -233,6 +234,7 @@ class Scraper:
             "div").contents[0].split(",")
         return comp
 
+    # WIP, currently cannot find certain React-generated methods
     # @staticmethod
     # def get_carrier_compatibility_selenium(driver):
     #     comp = driver.find_element_by_xpath("//*[contains(text(), 'Carrier Compatibility')]")
@@ -246,17 +248,91 @@ class Scraper:
         # scraper = Scraper()
         pass
 
+    ####################################################################################################################
+    # Error handling functions                                                                                         #
+    ####################################################################################################################
 
-####################################################################################################################
-# Tool Functions                                                                                                   #
-####################################################################################################################
+    @staticmethod
+    # Determines if no results are present from a given sku
+    # Test SKU: 0000000
+    def find_no_results_message_selenium(driver) -> bool:
+        xpath = '//*[@class="no-results-message"]'
+        if len(driver.find_elements_by_xpath(xpath)) > 0:
+            return True
+        return False
 
-def function_timer(func):
-    def wrapper(*args, **kwargs):
-        start = time.time()
-        x = func(*args, **kwargs)
-        end = time.time()
-        print(f"It took {end - start} seconds to process {func.__name__} for {args[0]}")
-        return x
-    return wrapper
+    @staticmethod
+    # Determines if something goes wrong i.e. cannot figure out what the browser is asking.
+    # Test "SKU": +
+    def find_something_went_wrong_message_selenium(driver) -> bool:
+        xpath = '//*[@class="heading VPT-title"]'
+        if len(driver.find_elements_by_xpath(xpath)) > 0:
+            return True
+        return False
+
+    # Returns a boolean. If no_results_message or something_went_wrong_message is present, return True because
+    # there are no results.
+    @function_timer
+    def no_results_flag(self, driver: webdriver, catch_condition: bool = False) -> bool:
+
+        # Assume there is no exception and there are no search results
+        no_results = True
+        went_wrong = True
+
+        # Looks for "No results found" message using try - except
+        # try:
+        #     self.find_no_results_message_selenium(driver)
+        #     print("No results found message present")
+        # except NoSuchElementException:
+        #     # There are results
+        #     no_results = False
+
+        # Looks for "Something went wrong" message
+        # try:
+        #     self.find_something_went_wrong_message_selenium(driver)
+        #     print("Something went wrong message present")
+        # except NoSuchElementException:
+        #     # Nothing went wrong
+        #     went_wrong = False
+
+        # I could possibly rewrite this method to accept a function condition
+        # If a catch condition is present (True), don't search for the next two exceptions to save resources (namely
+        #   time)
+        if catch_condition:
+            return catch_condition
+
+        if self.find_no_results_message_selenium(driver) > 0:
+            print("No results found message present")
+        else:
+            no_results = False
+
+        if self.find_something_went_wrong_message_selenium(driver):
+            print("Something went wrong message present")
+        else:
+            went_wrong = False
+
+        # Returns True if the no_results message is found or the something_went_wrong message is found.
+        if no_results or went_wrong:
+            return True
+        return False
+
+    ####################################################################################################################
+    # Data cleaning functions                                                                                         #
+    ####################################################################################################################
+
+    @staticmethod
+    def find_price(tag):
+        # Regex to select pricing in a string
+        regex_selector = r"(USD|EUR|€|\$|£)\s?(\d{1,}(?:[.,]\d{3})*(?:[.,]\d{2}))|(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\s?(USD|EUR)"
+        matches = regex.compile(regex_selector)
+        prices = list(matches.findall(tag))
+        if len(prices) == 0:
+            return 0
+        # For some reason this regex returns ('$', '<price in number form>', '', '')
+        # Saving the number to the list explicitly
+        for i in range(len(prices)):
+            prices[i] = prices[i][1]
+        return prices
+
+
 
