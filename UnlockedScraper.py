@@ -10,7 +10,7 @@ from Scraper import Scraper
 from Wrappers import function_timer
 
 
-class UNLScraper(Scraper):
+class UnlockedScraper(Scraper):
 
     def __init__(self, url=""):
         super().__init__(url)
@@ -141,8 +141,6 @@ class UNLScraper(Scraper):
     # Currently only works if there is one "disclaimer" tag. Currently no offers to add additional functionality
     @function_timer
     def get_activation_prices(self, sku, driver):
-        # Adds WebDriver as a property to the class. May make things easier. Maybe harder. We'll see.
-        # self.driver = driver
         price_page = f"https://www.bestbuy.com/wireless/transaction-types/render/carriers?numberOfPayments=1&purchaseType=FULL_SRP&skuId={sku}"
         # Must use a Selenium driver because the pricing is the result of a javascript function
         driver.get(price_page)
@@ -163,7 +161,7 @@ class UNLScraper(Scraper):
 
         if no_results:
             print(f"A no result flag has been triggered in get_activation_prices with sku: {sku}")
-            return 0
+            return {}
 
         try:
             try:
@@ -244,7 +242,8 @@ class UNLScraper(Scraper):
                 else:
                     unactivated = self.find_price(unactivated_element.text)[0]
                 unactivated_element_present = True
-            except Exception:
+            except Exception as e:
+                print(f"Something went wrong with the activate-later element on SKU {sku}: {e}")
                 unactivated_element_present = False
 
             # Verizon
@@ -328,8 +327,8 @@ class UNLScraper(Scraper):
             print(activation_price_dict)
 
         except Exception as e:
-            print(f"An exception occurred: {e}")
+            print(f"An exception occurred: {e} {repr(e)}")
             driver.quit()
-            return None
+            return {}
 
         return activation_price_dict
