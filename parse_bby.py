@@ -1,12 +1,14 @@
-import time
-
+import sys
+import logging
 from Saver import Saver
 from Scraper import Scraper
+from Wrappers import function_timer
 
 
 def enter_url():
     url = str(input("Input the url you are parsing: "))
     return url
+
 
 def library_methods():
     # Returns the request.get status code
@@ -44,19 +46,11 @@ def library_methods():
     # Returns the current page of results
     print(scraper.get_current_page())
 
+
 if __name__ == "__main__":
-    url = ""
 
-    # User-supplied URL
-    # while url == "":
-    #     url = enter_url()
-    # print(f"Scraping {url}")
-    # print(scraper.get_status_code())
-
-    # Initialize Scraper object with the given url (optional)
     scraper = Scraper()
 
-    t = time.time()
     saver = Saver()
-    saver.write_unl_phones_csv()
-    print(time.time() - t)
+
+    function_timer(saver.write_unl_phones_csv())

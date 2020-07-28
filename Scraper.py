@@ -1,27 +1,17 @@
-import csv
-
 import requests
 from bs4 import BeautifulSoup
-from requests_html import HTMLSession
-import time
-import selenium
-import html5lib
-import validators
 import regex
-import threading
-
-from requests import HTTPError
-from validator_collection import checkers
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
+from fake_useragent import UserAgent
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.keys import Keys
-from regex import compile
 import asyncio
 import aiohttp
+from Wrappers import function_timer
 
 
 # This class encapsulates scraping tools for use on the Best Buy website.
@@ -61,40 +51,29 @@ class Scraper:
     def _get_contents(self):
         return BeautifulSoup(self.req.content, "html5lib")
 
+    # Reruns _get_contents
+    def _retry_get_contents(self):
+        return self._get_contents()
+
     # Starts Selenium and returns a webdriver object
     @staticmethod
     def start_selenium():
         options = Options()
-        options.headless = False
-        driver = webdriver.Firefox(options=options)
+        profile = webdriver.FirefoxProfile()
+        user_agent = UserAgent().random
 
-        print("Starting a headless selenium browser")
+        # Set the selenium instance to headless
+        options.headless = True
+        # Set UserAgent to a random one. Avoids automated scraper shutdowns
+        profile.set_preference("general.useragent.override", user_agent)
+        # Add the profile and options parameters to the selenium WebDriver
+        driver = webdriver.Firefox(firefox_profile=profile, options=options)
+
+        if options.headless:
+            print(f"Starting a headless selenium browser")
+        else:
+            print(f"Starting a non-headless selenium browser")
         return driver
-
-    # Clicks "<element>" on a page using Selenium and returns the information in "<name>"
-    # Deprecated, keeping for formatting reference
-    def _click_element(self, element, name):
-        driver = self.start_selenium()
-        driver.get(self.url)
-
-        # Deprecated
-        if name == "UPC":
-            # Wait to see the button before trying to click it
-            try:
-                button = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, '//button[@data-track["Specifications"]]')))
-            finally:
-                button.click()
-            print(button)
-            row_values = driver.find_elements_by_xpath('//div[@class["title-container"]]')
-            # for i in row_values:
-            #     try:
-            #         print(int(i.text))
-            #     except Exception:
-            #         pass
-            # driver.quit()
-
-        return row_values
 
     @staticmethod
     def _wait_for_load_selenium(xpath, driver):
@@ -112,6 +91,9 @@ class Scraper:
     ####################################################################################################################
     # Get Functions for search pages                                                                                   #
     ####################################################################################################################
+
+    # https://www.bestbuy.com/site/searchpage.jsp?st=*
+    # Did not know you could do this.
 
     # Returns the link to each product on the given search page.
     def get_product_names(self):
@@ -226,8 +208,21 @@ class Scraper:
 
     # Get product name on product page
     def get_product_name_on_product_page(self):
-        title = self.contents.find("div", attrs={"itemprop": "name"}).find_next("h1").text
+        try:
+            title = self.contents.find("div", attrs={"itemprop": "name"}).find_next("h1").text
+        except Exception as e:
+            print(f"get_product_name_on_product_page failed with Exception: {e}\n")
+            title = ""
         return title
+
+    # Get product name on product page with Selenium by xpath
+    # WIP, currently results in "Unable to find element <xpath>"
+    @staticmethod
+    def get_product_name_on_product_page_selenium(driver):
+        driver.implicitly_wait(5)
+        WebDriverWait(driver, 5)
+        title_element = driver.find_element_by_xpath('//*[@class="sku-title"]')
+        return title_element.text
 
     # Gets the price of the page item.
     def get_prices(self):
@@ -242,10 +237,35 @@ class Scraper:
     def get_carrier_compatibility(self):
         # find_all returns a list, isolate the only element in the list, find the parent, then find the next div
         # which contains the carrier compatibility
-        comp = self.contents.find_all(string=regex.compile("Carrier Compatibility"), limit=1)[0].parent.find_next(
-            "div").contents[0].split(",")
+        count = 0
+        try:
+            comp = self.contents.find_all(string=regex.compile("Carrier Compatibility"), limit=1)[0].parent.find_next(
+                "div").contents[0].split(",")
+        except Exception as e:
+            print("get_carrier_compatibility failed with Exception: {e}\n")
+            comp = []
         return comp
 
+    def is_available(self):
+        is_unavailable = self.contents.find_all("button", attrs={"add-to-cart-button", "disabled"})
+        if len(is_unavailable) > 0:
+            return False
+        return True
+
+    @staticmethod
+    # Finds the "Add to Cart" button and determines if it is disabled. Returns True if available, False otherwise
+    # I think this is blocked in bestbuy.com/robots.txt
+    def is_available_selenium(driver) -> bool:
+        xpath = '//button[@class="add-to-cart-button"]'
+        button = driver.find_element_by_xpath(xpath)
+        button_text = button.text
+        return button.is_enabled()
+
+    # WIP, currently cannot find certain React-generated methods
+    # @staticmethod
+    # def get_carrier_compatibility_selenium(driver):
+    #     comp = driver.find_element_by_xpath("//*[contains(text(), 'Carrier Compatibility')]")
+    #     return comp
     ####################################################################################################################
     # Set Functions                                                                                                    #
     ####################################################################################################################
@@ -254,5 +274,76 @@ class Scraper:
     def set_page(self):
         # scraper = Scraper()
         pass
+
+    ####################################################################################################################
+    # Error handling functions                                                                                         #
+    ####################################################################################################################
+
+    @staticmethod
+    # Determines if no results are present from a given sku
+    # Test SKU: 0000000
+    def find_no_results_message_selenium(driver) -> bool:
+        xpath = '//*[@class="no-results-message"]'
+        if len(driver.find_elements_by_xpath(xpath)) > 0:
+            return True
+        return False
+
+    @staticmethod
+    # Determines if something goes wrong i.e. cannot figure out what the browser is asking.
+    # Test "SKU": +
+    def find_something_went_wrong_message_selenium(driver) -> bool:
+        xpath = '//*[@class="heading VPT-title"]'
+        if len(driver.find_elements_by_xpath(xpath)) > 0:
+            return True
+        return False
+
+    # Returns a boolean. If no_results_message or something_went_wrong_message is present, return True because
+    # there are no results.
+    # If there is a catch condition, the presence indicates there are results, so if catch_condition return False
+    @function_timer
+    def no_results_flag(self, driver: webdriver, catch_condition: bool) -> bool:
+
+        # Assume there is not an exception and there are no search results
+        no_results = True
+        went_wrong = True
+
+        # If a catch condition is present (True), don't search for the next two exceptions to save resources (namely
+        #   time)
+        if catch_condition:
+            return False
+
+        if self.find_no_results_message_selenium(driver) > 0:
+            print("No results found message present")
+        else:
+            no_results = False
+
+        if self.find_something_went_wrong_message_selenium(driver):
+            print("Something went wrong message present")
+        else:
+            went_wrong = False
+
+        # Returns True if the no_results message is found or the something_went_wrong message is found.
+        if no_results or went_wrong:
+            return True
+        return False
+
+    ####################################################################################################################
+    # Data cleaning functions                                                                                          #
+    ####################################################################################################################
+
+    @staticmethod
+    def find_price(tag):
+        # Regex to select pricing in a string
+        regex_selector = r"(USD|EUR|€|\$|£)\s?(\d{1,}(?:[.,]\d{3})*(?:[.,]\d{2}))|(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\s?(USD|EUR)"
+        matches = regex.compile(regex_selector)
+        prices = list(matches.findall(tag))
+        if len(prices) == 0:
+            return 0
+        # For some reason this regex returns ('$', '<price in number form>', '', '')
+        # Saving the number to the list explicitly
+        for i in range(len(prices)):
+            prices[i] = f"{prices[i][1]}"
+        return prices
+
 
 
