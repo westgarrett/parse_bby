@@ -1,25 +1,14 @@
-import csv
-from typing import Callable
-
 import requests
 from bs4 import BeautifulSoup
-from requests_html import HTMLSession
-import time
-import selenium
-import html5lib
-import validators
 import regex
-import threading
-from requests import HTTPError
-from validator_collection import checkers
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
+from fake_useragent import UserAgent
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.keys import Keys
-from regex import compile
 import asyncio
 import aiohttp
 from Wrappers import function_timer
@@ -62,19 +51,33 @@ class Scraper:
     def _get_contents(self):
         return BeautifulSoup(self.req.content, "html5lib")
 
+    # Reruns _get_contents
+    def _retry_get_contents(self):
+        return self._get_contents()
+
     # Starts Selenium and returns a webdriver object
     @staticmethod
     def start_selenium():
         options = Options()
-        options.headless = True
-        driver = webdriver.Firefox(options=options)
+        profile = webdriver.FirefoxProfile()
+        user_agent = UserAgent().random
 
-        print("Starting a headless selenium browser")
+        # Set the selenium instance to headless
+        options.headless = True
+        # Set UserAgent to a random one. Avoids automated scraper shutdowns
+        profile.set_preference("general.useragent.override", user_agent)
+        # Add the profile and options parameters to the selenium WebDriver
+        driver = webdriver.Firefox(firefox_profile=profile, options=options)
+
+        if options.headless:
+            print(f"Starting a headless selenium browser")
+        else:
+            print(f"Starting a non-headless selenium browser")
         return driver
 
     @staticmethod
     def _wait_for_load_selenium(xpath, driver):
-        wait = WebDriverWait(driver, 1)
+        wait = WebDriverWait(driver, 5)
         wait.until(EC.visibility_of_element_located((By.XPATH, xpath)))
 
     ####################################################################################################################
@@ -205,7 +208,11 @@ class Scraper:
 
     # Get product name on product page
     def get_product_name_on_product_page(self):
-        title = self.contents.find("div", attrs={"itemprop": "name"}).find_next("h1").text
+        try:
+            title = self.contents.find("div", attrs={"itemprop": "name"}).find_next("h1").text
+        except Exception as e:
+            print(f"get_product_name_on_product_page failed with Exception: {e}\n")
+            title = ""
         return title
 
     # Get product name on product page with Selenium by xpath
@@ -230,9 +237,29 @@ class Scraper:
     def get_carrier_compatibility(self):
         # find_all returns a list, isolate the only element in the list, find the parent, then find the next div
         # which contains the carrier compatibility
-        comp = self.contents.find_all(string=regex.compile("Carrier Compatibility"), limit=1)[0].parent.find_next(
-            "div").contents[0].split(",")
+        count = 0
+        try:
+            comp = self.contents.find_all(string=regex.compile("Carrier Compatibility"), limit=1)[0].parent.find_next(
+                "div").contents[0].split(",")
+        except Exception as e:
+            print("get_carrier_compatibility failed with Exception: {e}\n")
+            comp = []
         return comp
+
+    def is_available(self):
+        is_unavailable = self.contents.find_all("button", attrs={"add-to-cart-button", "disabled"})
+        if len(is_unavailable) > 0:
+            return False
+        return True
+
+    @staticmethod
+    # Finds the "Add to Cart" button and determines if it is disabled. Returns True if available, False otherwise
+    # I think this is blocked in bestbuy.com/robots.txt
+    def is_available_selenium(driver) -> bool:
+        xpath = '//button[@class="add-to-cart-button"]'
+        button = driver.find_element_by_xpath(xpath)
+        button_text = button.text
+        return button.is_enabled()
 
     # WIP, currently cannot find certain React-generated methods
     # @staticmethod
@@ -301,7 +328,7 @@ class Scraper:
         return False
 
     ####################################################################################################################
-    # Data cleaning functions                                                                                         #
+    # Data cleaning functions                                                                                          #
     ####################################################################################################################
 
     @staticmethod
@@ -315,11 +342,7 @@ class Scraper:
         # For some reason this regex returns ('$', '<price in number form>', '', '')
         # Saving the number to the list explicitly
         for i in range(len(prices)):
-            # for j in range(len(prices[i])):
-            #     # if the list item is an empty string, remove it from the list
-            #     if prices[i][j] == "":
-            #         del prices[i][j]
-            prices[i] = prices[i][1]
+            prices[i] = f"{prices[i][1]}"
         return prices
 
 
