@@ -1,8 +1,9 @@
 import csv
 from typing import TextIO
 
+from CarrierScraper import CarrierScraper
 from Scraper import Scraper
-from UNLScraper import UNLScraper
+from UnlockedScraper import UnlockedScraper
 # from CarrierScraper import CarrierScraper
 from Scraper import function_timer
 
@@ -10,7 +11,7 @@ from Scraper import function_timer
 class Saver:
 
     def __init__(self):
-        self.field_names = ['ID', 'SKU', 'ProductName', 'Compatibility', 'ATT_new_price',
+        self.field_names = ['ID', 'SKU', 'ProductName', 'URL', 'Compatibility', 'Available', 'Rerun', 'ATT_new_price',
                             'ATT_upg_price', 'SPR_new_price', 'SPR_upg_price', 'VZW_new_price',
                             'VZW_upg_price', 'TMO_new_price', 'TMO_upg_price',
                             'Unactivated_price'
@@ -18,7 +19,7 @@ class Saver:
         self.scraper = Scraper()
         self.index = 0
 
-        self.phones = open("./outputFiles/phones.csv", "w", newline="")
+        self.phones = open("./outputFiles/phones.csv", "w", encoding="utf-8", newline="")
         self.writer_obj = csv.DictWriter(self.phones, fieldnames=self.field_names, delimiter=",", quotechar='"',
                                          quoting=csv.QUOTE_MINIMAL)
         self.writer_obj.writeheader()
@@ -42,8 +43,7 @@ class Saver:
     # Write functions                                                                                                  #
     ####################################################################################################################
 
-    # Write to phones.csv with a given text file of skus.txt
-    #         Int,String,String,Dict_of_doubles
+    # Write to phones.csv for carrier-agnostic devices
     def write_unl_phones_csv(self):
         skus = open("./skuLists/unl_skus.txt", "r")
         # Phone activation prices are called with a javascript function, selenium is necessary
@@ -52,37 +52,46 @@ class Saver:
         # For each sku, run a request with a new scraper object for each product page
         for sku in skus:
             sku = sku.strip()
+            rerun = False
             search_url = f"https://www.bestbuy.com/site/searchpage.jsp?st={sku}"
-            unl_scraper = UNLScraper(search_url)
+            unl_scraper = UnlockedScraper(search_url)
             # Returns a dictionary of activation prices
             pricing_dict = unl_scraper.get_activation_prices(sku, driver)
-            print(pricing_dict)
 
-            if pricing_dict == 0:
-                print(f"SKU: {sku} does not exist on website. Terminate row.")
-            else:
+            product_name = unl_scraper.get_product_name_on_product_page()
+            compatibility = unl_scraper.get_carrier_compatibility()
+            is_available = unl_scraper.is_available()
 
-                product_name = unl_scraper.get_product_name_on_product_page()
-                compatibility = unl_scraper.get_carrier_compatibility()
+            # If the script fails to find product_name or compatibility, or pricing_dict errors out,
+            #   create a "rerun" flag to rerun the sku
+            if product_name == "" or compatibility == [] or pricing_dict == {}:
+                rerun = True
 
-                # Create a dictionary to write a row to CSV
-                row_dict = {"ID": self.index, "SKU": sku, "ProductName": product_name, "Compatibility": compatibility}
+            # Create a dictionary to write a row to CSV
+            row_dict = {"ID": self.index,
+                        "SKU": sku,
+                        "ProductName": product_name,
+                        "URL": search_url,
+                        "Compatibility": compatibility,
+                        "Available" : is_available,
+                        "Rerun": rerun
+                        }
 
-                # Merges the dictionary formed in get_activation_prices() to the row_dict dictionary
-                row_dict.update(pricing_dict)
-                self.writer_obj.writerow(row_dict)
-                self.index += 1
+            # Merges the dictionary formed in get_activation_prices() to the row_dict dictionary
+            row_dict.update(pricing_dict)
+            self.writer_obj.writerow(row_dict)
+            self.index += 1
 
-                # I think the Scraper()._get_contents() method is causing RAM usage to spike really hard.
-                # This should help a bit as none of the scraper objects are being reused.
-                print("Deleting the scraper object")
-                del unl_scraper
+            # I think the Scraper()._get_contents() method is causing RAM usage to spike really hard.
+            # This should help a bit as none of the scraper objects are being reused.
+            print("Deleting the scraper object")
+            del unl_scraper
 
         skus.close()
         self.phones.close()
         driver.quit()
 
-    # write to phones.csv
+    # write to phones.csv for carrier-branded devices
     def write_carrier_phones_csv(self):
         skus = open("./skuLists/carrier_skus.txt", "r")
 
